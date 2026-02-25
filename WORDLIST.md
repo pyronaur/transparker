@@ -10,3 +10,4 @@ exa
 bunmagic
 bm
 transparker
+AGENTS.md
