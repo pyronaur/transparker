@@ -4,7 +4,7 @@ Transparker is a local Bun service that exposes a purpose-built OpenAI-compatibl
 
 It is designed for a simple workflow:
 - Handy sends transcript text to a local endpoint.
-- Transparker returns corrected text in `chat.completions` response format.
+- Transparker runs Codex locally (via Bun shell) and returns corrected text in `chat.completions` response format.
 - The service runs automatically on macOS login via `launchd`.
 
 ## Quick Start
@@ -12,6 +12,7 @@ It is designed for a simple workflow:
 Requirements:
 - macOS
 - [Bun](https://bun.sh) installed
+- `codex` CLI installed and authenticated
 
 Install and enable the local service:
 
@@ -49,6 +50,30 @@ Environment defaults:
 - `TRANSPARKER_MODEL_ID=Transparker`
 - `TRANSPARKER_MODEL_OWNER=transparker-local`
 - `LOG_LEVEL=info`
+- `TRANSPARKER_CODEX_MODEL=gpt-5.3-codex-spark`
+- `TRANSPARKER_CODEX_BIN=codex`
+- `TRANSPARKER_CODEX_REASONING_EFFORT=medium`
+- `TRANSPARKER_CODEX_TIMEOUT_MS=120000`
+- `TRANSPARKER_CODEX_HOME_DIR=./codex`
+- `TRANSPARKER_CODEX_USER_HOME_DIR=./codex/.home`
+- `TRANSPARKER_GLOBAL_AUTH_FILE=~/codex/auth.json`
+- `TRANSPARKER_WORDLIST_FILE=./WORDLIST.md`
+- `TRANSPARKER_CODEX_CONFIG_FILE=./codex/config.toml`
+- `TRANSPARKER_AGENTS_FILE=./AGENTS.md`
+- `TRANSPARKER_PROMPT_FILE=./PROMPT.md`
+- `TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE=./codex/output.schema.json`
+
+Prompt files:
+- `AGENTS.md` is the instruction file copied into `./codex/AGENTS.md` at runtime.
+- `PROMPT.md` is the template file where `{{KNOWN_DOMAIN_TERMS}}` and `{{TRANSCRIPT}}` are injected.
+- `WORDLIST.md` is injected on every request so term edits apply live without restart.
+- If either file is empty, Transparker intentionally returns the original transcript unchanged (pass-through mode).
+
+Codex auth resolution:
+- Transparker uses `./codex/auth.json`.
+- If `./codex/auth.json` is missing and `TRANSPARKER_GLOBAL_AUTH_FILE` exists, Transparker creates a symlink automatically.
+- `OPENAI_API_KEY` is ignored by this runtime path.
+- For machine-specific auth paths, set `TRANSPARKER_GLOBAL_AUTH_FILE` to your local auth file path.
 
 ## macOS Service Management
 
