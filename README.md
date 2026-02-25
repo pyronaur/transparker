@@ -52,7 +52,7 @@ Environment defaults:
 - `LOG_LEVEL=info`
 - `TRANSPARKER_CODEX_MODEL=gpt-5.3-codex-spark`
 - `TRANSPARKER_CODEX_BIN=codex`
-- `TRANSPARKER_CODEX_REASONING_EFFORT=medium`
+- `TRANSPARKER_CODEX_REASONING_EFFORT=low`
 - `TRANSPARKER_CODEX_TIMEOUT_MS=120000`
 - `TRANSPARKER_CODEX_HOME_DIR=./codex`
 - `TRANSPARKER_CODEX_USER_HOME_DIR=./codex/.home`
@@ -74,6 +74,31 @@ Codex auth resolution:
 - If `./codex/auth.json` is missing and `TRANSPARKER_GLOBAL_AUTH_FILE` exists, Transparker creates a symlink automatically.
 - `OPENAI_API_KEY` is ignored by this runtime path.
 - For machine-specific auth paths, set `TRANSPARKER_GLOBAL_AUTH_FILE` to your local auth file path.
+
+Model selection:
+- Change `TRANSPARKER_CODEX_MODEL` to switch Codex models without code changes.
+- Default runtime mode is Codex Spark with low reasoning effort.
+- Change `TRANSPARKER_CODEX_REASONING_EFFORT` to `low`, `medium`, or `high`.
+
+How to change model settings:
+- If you run via LaunchAgent (recommended):
+  1. Edit `~/Library/LaunchAgents/com.transparker.api.plist` under `EnvironmentVariables`.
+  2. Set `TRANSPARKER_CODEX_MODEL` and/or `TRANSPARKER_CODEX_REASONING_EFFORT`.
+  3. Reload the agent:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.transparker.api.plist 2>/dev/null || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.transparker.api.plist
+launchctl kickstart -k gui/$(id -u)/com.transparker.api
+```
+
+- If you run manually (`bun run start` / `bun run dev`):
+
+```bash
+export TRANSPARKER_CODEX_MODEL=gpt-5.3-codex-spark
+export TRANSPARKER_CODEX_REASONING_EFFORT=low
+bun run start
+```
 
 ## macOS Service Management
 
