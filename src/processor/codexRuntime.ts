@@ -80,7 +80,7 @@ function parseReasoningEffort(
   if (raw === "low" || raw === "medium" || raw === "high") {
     return raw;
   }
-  return "medium";
+  return "low";
 }
 
 function resolvePath(projectRoot: string, pathLike: string): string {

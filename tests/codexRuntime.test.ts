@@ -88,6 +88,17 @@ describe("loadCodexRuntimeConfig", () => {
     } as unknown as NodeJS.ProcessEnv);
 
     expect(config.globalAuthFile).toBe(join(homedir(), "codex/auth.json"));
+    expect(config.model).toBe("gpt-5.3-codex-spark");
+    expect(config.reasoningEffort).toBe("low");
+  });
+
+  test("allows overriding codex model via env", () => {
+    const config = loadCodexRuntimeConfig({
+      TRANSPARKER_PROJECT_ROOT: "/tmp/transparker-test",
+      TRANSPARKER_CODEX_MODEL: "gpt-5.3-codex-spark-custom"
+    } as unknown as NodeJS.ProcessEnv);
+
+    expect(config.model).toBe("gpt-5.3-codex-spark-custom");
   });
 });
 
