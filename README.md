@@ -60,15 +60,19 @@ Environment defaults:
 - `TRANSPARKER_GLOBAL_AUTH_FILE=~/codex/auth.json`
 - `TRANSPARKER_WORDLIST_FILE=./WORDLIST.md`
 - `TRANSPARKER_CODEX_CONFIG_FILE=./codex/config.toml`
-- `TRANSPARKER_AGENTS_FILE=./AGENTS.md`
 - `TRANSPARKER_PROMPT_FILE=./PROMPT.md`
 - `TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE=./codex/output.schema.json`
 
 Prompt files:
-- `AGENTS.md` is the instruction file copied into `./codex/AGENTS.md` at runtime.
+- `codex/AGENTS.md` is the canonical Codex instruction file.
 - `PROMPT.md` is the template file where `{{KNOWN_DOMAIN_TERMS}}` and `{{TRANSCRIPT}}` are injected.
 - `WORDLIST.md` is injected on every request so term edits apply live without restart.
 - If either file is empty, Transparker intentionally returns the original transcript unchanged (pass-through mode).
+
+Architecture notes:
+- Transparker always executes Codex with `CODEX_HOME=./codex`.
+- Keeping AGENTS inside project-local `CODEX_HOME` prevents inheriting global home instructions.
+- Behavior edits live in `codex/AGENTS.md`, `PROMPT.md`, and `WORDLIST.md`.
 
 Codex auth resolution:
 - Transparker uses `./codex/auth.json`.
