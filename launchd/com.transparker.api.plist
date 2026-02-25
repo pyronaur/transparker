@@ -25,6 +25,8 @@
       <string>production</string>
       <key>LOG_LEVEL</key>
       <string>info</string>
+      <key>TRANSPARKER_LOG_FULL_TRANSCRIPTS</key>
+      <string>false</string>
       <key>TRANSPARKER_CODEX_MODEL</key>
       <string>gpt-5.3-codex-spark</string>
       <key>TRANSPARKER_CODEX_REASONING_EFFORT</key>

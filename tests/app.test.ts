@@ -7,6 +7,7 @@ const baseConfig: AppConfig = {
   port: 43113,
   host: "127.0.0.1",
   logLevel: "error",
+  logFullTranscripts: false,
   modelId: "Transparker",
   modelOwner: "transparker-local"
 };
@@ -97,5 +98,49 @@ describe("app routes", () => {
 
     expect(response.status).toBe(400);
     expect(json.error.code).toBe("streaming_unsupported");
+  });
+
+  test("includes full transcript fields when enabled", async () => {
+    const lines: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => {
+      lines.push(args.map((part) => String(part)).join(" "));
+    };
+
+    try {
+      const app = createApp(
+        {
+          ...baseConfig,
+          logLevel: "info",
+          logFullTranscripts: true
+        },
+        new Logger("info"),
+        {
+          processTranscript: async (text) => `processed:${text}`
+        }
+      );
+
+      await app.fetch(
+        new Request("http://localhost/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "Transparker",
+            messages: [{ role: "user", content: "full text input" }]
+          })
+        })
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    const events = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+    const received = events.find((event) => event.message === "transcript_received");
+    const processed = events.find((event) => event.message === "transcript_processed");
+
+    expect(received?.input_full).toBe("full text input");
+    expect(processed?.output_full).toBe("processed:full text input");
   });
 });

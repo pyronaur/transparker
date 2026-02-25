@@ -88,7 +88,8 @@ export function createApp(config: AppConfig, logger: Logger, deps: AppDependenci
             request_id: requestId,
             model: validation.model,
             input_chars: validation.userText.length,
-            input_preview: previewText(validation.userText)
+            input_preview: previewText(validation.userText),
+            ...(config.logFullTranscripts ? { input_full: validation.userText } : {})
           });
 
           const processed = await deps.processTranscript(validation.userText);
@@ -96,7 +97,8 @@ export function createApp(config: AppConfig, logger: Logger, deps: AppDependenci
           logger.info("transcript_processed", {
             request_id: requestId,
             output_chars: processed.length,
-            output_preview: previewText(processed)
+            output_preview: previewText(processed),
+            ...(config.logFullTranscripts ? { output_full: processed } : {})
           });
 
           const promptTokens = estimateTokens(validation.userText);

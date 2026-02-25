@@ -50,6 +50,7 @@ Environment defaults:
 - `TRANSPARKER_MODEL_ID=Transparker`
 - `TRANSPARKER_MODEL_OWNER=transparker-local`
 - `LOG_LEVEL=info`
+- `TRANSPARKER_LOG_FULL_TRANSCRIPTS=false`
 - `TRANSPARKER_CODEX_MODEL=gpt-5.3-codex-spark`
 - `TRANSPARKER_CODEX_BIN=codex`
 - `TRANSPARKER_CODEX_REASONING_EFFORT=low`
@@ -129,6 +130,14 @@ launchctl print gui/$(id -u)/com.transparker.api | rg "state =|pid ="
 Logs:
 - `~/Library/Logs/Transparker/transparker.out.log`
 - `~/Library/Logs/Transparker/transparker.err.log`
+
+Full transcript debug logs (opt-in):
+- Set `LOG_LEVEL=debug`.
+- Set `TRANSPARKER_LOG_FULL_TRANSCRIPTS=true`.
+- When enabled, request logs include:
+  - `transcript_received.input_full`
+  - `transcript_processed.output_full`
+- Default is disabled to avoid storing full transcript text in logs.
 
 Live log tail:
 
