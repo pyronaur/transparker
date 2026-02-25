@@ -1,0 +1,17 @@
+{
+  "name": "transparker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:local": "./scripts/install.sh",
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "check": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.9",
+    "typescript": "^5.9.2"
+  }
+}
