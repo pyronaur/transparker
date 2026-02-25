@@ -24,7 +24,6 @@ export interface CodexRuntimeConfig {
   readonly globalAuthFile: string;
   readonly wordlistFile: string;
   readonly codexConfigFile: string;
-  readonly agentsFile: string;
   readonly promptFile: string;
   readonly outputSchemaFile: string;
 }
@@ -211,7 +210,6 @@ export function loadCodexRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Co
     globalAuthFile: env.TRANSPARKER_GLOBAL_AUTH_FILE ?? defaultGlobalAuthFile,
     wordlistFile: env.TRANSPARKER_WORDLIST_FILE ?? "./WORDLIST.md",
     codexConfigFile: env.TRANSPARKER_CODEX_CONFIG_FILE ?? "./codex/config.toml",
-    agentsFile: env.TRANSPARKER_AGENTS_FILE ?? "./AGENTS.md",
     promptFile: env.TRANSPARKER_PROMPT_FILE ?? "./PROMPT.md",
     outputSchemaFile: env.TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE ?? "./codex/output.schema.json"
   };
@@ -321,7 +319,6 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   const execCodex = options.execCodex ?? runCodexCommand;
 
   const projectRoot = options.config.projectRoot;
-  const rootAgentsPath = resolvePath(projectRoot, options.config.agentsFile);
   const rootPromptPath = resolvePath(projectRoot, options.config.promptFile);
   const rootWordlistPath = resolvePath(projectRoot, options.config.wordlistFile);
   const codexHomePath = resolvePath(projectRoot, options.config.codexHomeDir);
@@ -330,21 +327,22 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   const codexConfigPath = resolvePath(projectRoot, options.config.codexConfigFile);
   const schemaPath = resolvePath(projectRoot, options.config.outputSchemaFile);
 
+  await mkdir(codexHomePath, { recursive: true });
+
   const [agentsText, promptTemplate] = await Promise.all([
-    readFile(rootAgentsPath, "utf8"),
+    readFile(codexAgentsPath, "utf8"),
     readFile(rootPromptPath, "utf8")
   ]);
 
   if (isBlank(agentsText) || isBlank(promptTemplate)) {
     options.logger.info("codex_passthrough_empty_prompt_files", {
-      agents_file: rootAgentsPath,
+      agents_file: codexAgentsPath,
       prompt_file: rootPromptPath
     });
     return options.transcript;
   }
 
   await Promise.all([
-    mkdir(codexHomePath, { recursive: true }),
     mkdir(codexUserHomePath, { recursive: true }),
     ensureSchema(schemaPath)
   ]);
@@ -361,13 +359,10 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
 
   const authMode = await ensureAuth(options.config, codexHomePath);
 
-  await Promise.all([
-    writeFile(codexAgentsPath, agentsText, "utf8"),
-    writeCodexConfig(codexConfigPath, options.config.reasoningEffort)
-  ]);
+  await writeCodexConfig(codexConfigPath, options.config.reasoningEffort);
 
   options.logger.info("codex_assets_loaded", {
-    agents_file: rootAgentsPath,
+    agents_file: codexAgentsPath,
     prompt_file: rootPromptPath,
     wordlist_file: rootWordlistPath,
     agents_chars: agentsText.length,

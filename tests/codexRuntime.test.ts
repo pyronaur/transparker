@@ -27,10 +27,14 @@ function createConfig(projectRoot: string, timeoutMs = 5000): CodexRuntimeConfig
     globalAuthFile: "./global-auth.json",
     wordlistFile: "./WORDLIST.md",
     codexConfigFile: "./codex/config.toml",
-    agentsFile: "./AGENTS.md",
     promptFile: "./PROMPT.md",
     outputSchemaFile: "./codex/output.schema.json"
   };
+}
+
+async function writeCodexAgents(projectRoot: string, text: string): Promise<void> {
+  await mkdir(resolve(projectRoot, "codex"), { recursive: true });
+  await writeFile(resolve(projectRoot, "codex/AGENTS.md"), text, "utf8");
 }
 
 const noopLogger: CodexRuntimeLogger = {
@@ -103,10 +107,31 @@ describe("loadCodexRuntimeConfig", () => {
 });
 
 describe("processWithCodex", () => {
+  test("requires codex/AGENTS.md and does not read root AGENTS.md", async () => {
+    const projectRoot = await makeTempProject();
+    try {
+      await writeFile(resolve(projectRoot, "AGENTS.md"), "root should be ignored", "utf8");
+      await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
+      await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
+      await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
+
+      await expect(
+        processWithCodex({
+          transcript: "raw transcript",
+          config: createConfig(projectRoot),
+          logger: noopLogger,
+          execCodex: async () => ({ exitCode: 0, stdout: "", stderr: "" })
+        })
+      ).rejects.toThrow("codex/AGENTS.md");
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("returns passthrough text when AGENTS or PROMPT is blank", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "", "utf8");
+      await writeCodexAgents(projectRoot, "");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "   \n", "utf8");
 
       let called = false;
@@ -131,7 +156,7 @@ describe("processWithCodex", () => {
     const projectRoot = await makeTempProject();
     try {
       const agents = "# rules\n";
-      await writeFile(resolve(projectRoot, "AGENTS.md"), agents, "utf8");
+      await writeCodexAgents(projectRoot, agents);
       await writeFile(
         resolve(projectRoot, "PROMPT.md"),
         "Terms:\n{{KNOWN_DOMAIN_TERMS}}\nTranscript:\n{{TRANSCRIPT}}\n",
@@ -167,9 +192,7 @@ describe("processWithCodex", () => {
         })
       );
 
-      const mirroredAgents = await readFile(resolve(projectRoot, "codex/AGENTS.md"), "utf8");
       const configToml = await readFile(resolve(projectRoot, "codex/config.toml"), "utf8");
-      expect(mirroredAgents).toBe(agents);
       expect(configToml).toContain('web_search = "disabled"');
       expect(configToml).toContain('personality = "none"');
       expect(configToml).toContain('model_reasoning_effort = "medium"');
@@ -183,7 +206,7 @@ describe("processWithCodex", () => {
   test("symlinks global auth into CODEX_HOME when local auth missing", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeCodexAgents(projectRoot, "rules");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
       await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
@@ -217,7 +240,7 @@ describe("processWithCodex", () => {
   test("is safe under concurrent auth link creation", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeCodexAgents(projectRoot, "rules");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
       await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
@@ -251,7 +274,7 @@ describe("processWithCodex", () => {
   test("aborts codex execution when timeout is reached", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeCodexAgents(projectRoot, "rules");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
       await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
@@ -295,7 +318,7 @@ describe("processWithCodex", () => {
   test("throws clear error when wordlist file is missing", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeCodexAgents(projectRoot, "rules");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
 
@@ -317,7 +340,7 @@ describe("processWithCodex", () => {
   test("throws clear error when no auth file even if OPENAI_API_KEY is present", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeCodexAgents(projectRoot, "rules");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
 
@@ -339,7 +362,7 @@ describe("processWithCodex", () => {
   test("throws when codex exits non-zero", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeCodexAgents(projectRoot, "rules");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
       await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
@@ -362,7 +385,7 @@ describe("processWithCodex", () => {
   test("throws typed error for invalid codex JSON shape", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeCodexAgents(projectRoot, "rules");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
       await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
