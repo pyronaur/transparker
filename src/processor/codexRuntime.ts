@@ -1,4 +1,3 @@
-import { $ } from "bun";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -38,6 +37,7 @@ export interface CodexExecInput {
   readonly schemaPath: string;
   readonly promptPath: string;
   readonly jsonOutputPath: string;
+  readonly abortSignal?: AbortSignal;
 }
 
 interface CodexExecOutput {
@@ -170,8 +170,20 @@ async function ensureAuth(
   const globalAuthPath = resolvePath(config.projectRoot, config.globalAuthFile);
 
   if (!(await exists(localAuthPath)) && (await exists(globalAuthPath))) {
-    await symlink(globalAuthPath, localAuthPath);
-    return "linked_global_file";
+    try {
+      await symlink(globalAuthPath, localAuthPath);
+      return "linked_global_file";
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "EEXIST" &&
+        (await exists(localAuthPath))
+      ) {
+        return "local_file";
+      }
+      throw error;
+    }
   }
 
   if (await exists(localAuthPath)) {
@@ -224,31 +236,72 @@ async function ensureSchema(schemaPath: string): Promise<void> {
 }
 
 async function runCodexCommand(input: CodexExecInput): Promise<CodexExecOutput> {
-  const output = await $`${input.codexBin} --ask-for-approval never -C ${input.cwd} exec --skip-git-repo-check --sandbox read-only --model ${input.model} --output-schema ${input.schemaPath} --output-last-message ${input.jsonOutputPath} - < ${input.promptPath}`
-    .cwd(input.cwd)
-    .env(input.env)
-    .quiet()
-    .nothrow();
+  const subprocess = Bun.spawn({
+    cmd: [
+      input.codexBin,
+      "--ask-for-approval",
+      "never",
+      "-C",
+      input.cwd,
+      "exec",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "--model",
+      input.model,
+      "--output-schema",
+      input.schemaPath,
+      "--output-last-message",
+      input.jsonOutputPath,
+      "-"
+    ],
+    cwd: input.cwd,
+    env: input.env,
+    stdin: Bun.file(input.promptPath),
+    stdout: "pipe",
+    stderr: "pipe",
+    signal: input.abortSignal
+  });
+
+  const [exitCode, stdout, stderr] = await Promise.all([
+    subprocess.exited,
+    new Response(subprocess.stdout).text(),
+    new Response(subprocess.stderr).text()
+  ]);
 
   return {
-    exitCode: output.exitCode,
-    stdout: output.stdout.toString(),
-    stderr: output.stderr.toString()
+    exitCode,
+    stdout,
+    stderr
   };
 }
 
-async function withSoftTimeout<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
-  let timeout: Timer | undefined;
+async function withSoftTimeout<T>(
+  work: (abortSignal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void
+): Promise<T> {
+  const abortController = new AbortController();
+  const workPromise = Promise.resolve().then(() => work(abortController.signal));
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
   try {
     const timeoutPromise = new Promise<T>((_, reject) => {
       timeout = setTimeout(() => {
+        timedOut = true;
         reject(new CodexRuntimeError("codex_timeout", `Codex timed out after ${timeoutMs}ms.`));
+        abortController.abort();
+        onTimeout?.();
       }, timeoutMs);
     });
-    return await Promise.race([work, timeoutPromise]);
+    return await Promise.race([workPromise, timeoutPromise]);
   } finally {
     if (timeout) {
       clearTimeout(timeout);
+    }
+    if (timedOut) {
+      void workPromise.catch(() => {});
     }
   }
 }
@@ -357,16 +410,24 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
     childEnv.CODEX_HOME = codexHomePath;
 
     const result = await withSoftTimeout(
-      execCodex({
-        codexBin: options.config.codexBin,
-        cwd: projectRoot,
-        env: childEnv,
-        model: options.config.model,
-        schemaPath,
-        promptPath,
-        jsonOutputPath
-      }),
-      options.config.timeoutMs
+      (abortSignal) =>
+        execCodex({
+          codexBin: options.config.codexBin,
+          cwd: projectRoot,
+          env: childEnv,
+          model: options.config.model,
+          schemaPath,
+          promptPath,
+          jsonOutputPath,
+          abortSignal
+        }),
+      options.config.timeoutMs,
+      () => {
+        options.logger.info("codex_exec_timeout_abort_requested", {
+          timeout_ms: options.config.timeoutMs,
+          model: options.config.model
+        });
+      }
     );
 
     if (result.exitCode !== 0) {

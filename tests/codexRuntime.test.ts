@@ -214,6 +214,84 @@ describe("processWithCodex", () => {
     }
   });
 
+  test("is safe under concurrent auth link creation", async () => {
+    const projectRoot = await makeTempProject();
+    try {
+      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
+      await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
+      await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
+
+      const requests = Array.from({ length: 40 }, (_, index) =>
+        processWithCodex({
+          transcript: `x-${index}`,
+          config: createConfig(projectRoot),
+          logger: noopLogger,
+          execCodex: async (input) => {
+            await writeFile(
+              input.jsonOutputPath,
+              JSON.stringify({ cleaned_transcript: `ok-${index}` }),
+              "utf8"
+            );
+            return { exitCode: 0, stdout: "", stderr: "" };
+          }
+        })
+      );
+
+      const outputs = await Promise.all(requests);
+      expect(outputs).toHaveLength(40);
+      const authPath = resolve(projectRoot, "codex/auth.json");
+      const stats = await lstat(authPath);
+      expect(stats.isSymbolicLink()).toBe(true);
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("aborts codex execution when timeout is reached", async () => {
+    const projectRoot = await makeTempProject();
+    try {
+      await writeFile(resolve(projectRoot, "AGENTS.md"), "rules", "utf8");
+      await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
+      await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
+      await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
+
+      let abortTriggered = false;
+
+      await expect(
+        processWithCodex({
+          transcript: "x",
+          config: createConfig(projectRoot, 20),
+          logger: noopLogger,
+          execCodex: async (input) =>
+            new Promise((_resolve, reject) => {
+              const signal = input.abortSignal;
+              if (!signal) {
+                reject(new Error("missing abort signal"));
+                return;
+              }
+
+              const onAbort = () => {
+                abortTriggered = true;
+                reject(new Error("aborted"));
+              };
+
+              if (signal.aborted) {
+                onAbort();
+                return;
+              }
+
+              signal.addEventListener("abort", onAbort, { once: true });
+            })
+        })
+      ).rejects.toMatchObject({ code: "codex_timeout" });
+
+      expect(abortTriggered).toBe(true);
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("throws clear error when wordlist file is missing", async () => {
     const projectRoot = await makeTempProject();
     try {
