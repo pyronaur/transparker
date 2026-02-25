@@ -1,50 +1,61 @@
-# Transparker Local API
+# Transparker: Use Codex CLI to Clean Handy.app Transcripts
 
-Transparker is a local Bun service that exposes a purpose-built OpenAI-compatible API for Handy.app post-processing.
+Transparker is a small local Bun.js service that lets Handy.app use Codex CLI for transcript cleanup.
+It gives Handy an OpenAI-compatible local endpoint, runs correction with your Codex auth/subscription, and returns cleaned text in `chat.completions` format.
 
-It is designed for a simple workflow:
-- Handy sends transcript text to a local endpoint.
-- Transparker runs Codex locally (via Bun shell) and returns corrected text in `chat.completions` response format.
-- The service runs automatically on macOS login via `launchd`.
+## Value
 
-## Quick Start
+- Use Codex CLI for transcript correction from Handy.app.
+- Avoid wiring an OpenAI API key into Handy for this workflow.
+- Keep prompt behavior editable with `codex/AGENTS.md`, `PROMPT.md`, and `WORDLIST.md`.
+- Run it as a persistent macOS LaunchAgent so it is always available.
+
+## How It Works
+
+- Handy sends transcript text to `POST /v1/chat/completions`.
+- Transparker calls `codex` with your local auth (`./codex/auth.json`, optionally symlinked from `TRANSPARKER_GLOBAL_AUTH_FILE`).
+- Transparker returns an OpenAI-shaped response with the cleaned transcript.
+- `OPENAI_API_KEY` is intentionally ignored by this runtime path.
+- The service is locally hosted, but Codex processing still depends on Codex backend/auth.
+
+## Quick Start (macOS)
 
 Requirements:
 - macOS
-- [Bun](https://bun.sh) installed
+- [Bun](https://bun.sh)
 - `codex` CLI installed and authenticated
 
-Install and enable the local service:
+Install, test, and enable auto-launch:
 
 ```bash
 bun run install:local
 ```
 
-This command:
-- installs dependencies
-- runs checks/tests
-- installs/starts the LaunchAgent
-- verifies `http://127.0.0.1:43113/healthz`
+`install:local` will:
+- install dependencies
+- run typecheck and tests
+- install and start the LaunchAgent
+- verify `http://127.0.0.1:43113/healthz`
 
-## Handy.app Configuration
+## Handy.app Setup
 
-Use the following values in Handy:
+Use these values in Handy.app:
 - Provider: `Custom`
 - Base URL: `http://127.0.0.1:43113/v1`
 - Model: `Transparker`
-- API key: optional for local use
+- API key: leave blank (not required for this local adapter)
 
-## API Surface
+## OpenAI-Compatible API Endpoints
 
 - `GET /healthz`
 - `GET /v1/models`
-- `POST /v1/chat/completions` (non-streaming only)
+- `POST /v1/chat/completions` (streaming not implemented)
 
-`/v1/models` returns `Transparker` so it appears in OpenAI-compatible model pickers.
+`/v1/models` advertises the configured model id (default `Transparker`) for model pickers.
 
 ## Configuration
 
-Environment defaults:
+Default environment values:
 - `HOST=127.0.0.1`
 - `PORT=43113`
 - `TRANSPARKER_MODEL_ID=Transparker`
@@ -63,33 +74,29 @@ Environment defaults:
 - `TRANSPARKER_PROMPT_FILE=./PROMPT.md`
 - `TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE=./codex/output.schema.json`
 
-Prompt files:
-- `codex/AGENTS.md` is the canonical Codex instruction file.
-- `PROMPT.md` is the template file where `{{KNOWN_DOMAIN_TERMS}}` and `{{TRANSCRIPT}}` are injected.
-- `WORDLIST.md` is injected on every request so term edits apply live without restart.
-- If either file is empty, Transparker intentionally returns the original transcript unchanged (pass-through mode).
+### Prompt and Wordlist Files
 
-Architecture notes:
-- Transparker always executes Codex with `CODEX_HOME=./codex`.
-- Keeping AGENTS inside project-local `CODEX_HOME` prevents inheriting global home instructions.
-- Behavior edits live in `codex/AGENTS.md`, `PROMPT.md`, and `WORDLIST.md`.
+- `codex/AGENTS.md`: canonical Codex instruction file.
+- `PROMPT.md`: template containing `{{KNOWN_DOMAIN_TERMS}}` and `{{TRANSCRIPT}}`.
+- `WORDLIST.md`: domain terms injected into each request.
 
-Codex auth resolution:
+### Codex Runtime and Auth
+
+- Codex runs with `CODEX_HOME=./codex`.
+- AGENTS instructions are loaded from project-local `CODEX_HOME`.
 - Transparker uses `./codex/auth.json`.
-- If `./codex/auth.json` is missing and `TRANSPARKER_GLOBAL_AUTH_FILE` exists, Transparker creates a symlink automatically.
+- If `./codex/auth.json` is absent and `TRANSPARKER_GLOBAL_AUTH_FILE` exists, Transparker creates a symlink.
 - `OPENAI_API_KEY` is ignored by this runtime path.
-- For machine-specific auth paths, set `TRANSPARKER_GLOBAL_AUTH_FILE` to your local auth file path.
 
-Model selection:
-- Change `TRANSPARKER_CODEX_MODEL` to switch Codex models without code changes.
-- Default runtime mode is Codex Spark with low reasoning effort.
-- Change `TRANSPARKER_CODEX_REASONING_EFFORT` to `low`, `medium`, or `high`.
+### Model Selection
 
-How to change model settings:
-- If you run via LaunchAgent (recommended):
-  1. Edit `~/Library/LaunchAgents/com.transparker.api.plist` under `EnvironmentVariables`.
-  2. Set `TRANSPARKER_CODEX_MODEL` and/or `TRANSPARKER_CODEX_REASONING_EFFORT`.
-  3. Reload the agent:
+- Set `TRANSPARKER_CODEX_MODEL` to choose the Codex model.
+- Set `TRANSPARKER_CODEX_REASONING_EFFORT` to `low`, `medium`, or `high`.
+
+LaunchAgent workflow:
+1. Edit `~/Library/LaunchAgents/com.transparker.api.plist` in `EnvironmentVariables`.
+2. Update `TRANSPARKER_CODEX_MODEL` and/or `TRANSPARKER_CODEX_REASONING_EFFORT`.
+3. Reload:
 
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.transparker.api.plist 2>/dev/null || true
@@ -97,7 +104,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.transparker.api.plis
 launchctl kickstart -k gui/$(id -u)/com.transparker.api
 ```
 
-- If you run manually (`bun run start` / `bun run dev`):
+Manual run workflow:
 
 ```bash
 export TRANSPARKER_CODEX_MODEL=gpt-5.3-codex-spark
@@ -113,7 +120,7 @@ Install/start LaunchAgent:
 ./scripts/install-launch-agent.sh
 ```
 
-Restart after code changes:
+Restart service:
 
 ```bash
 ./scripts/restart.sh
@@ -125,25 +132,27 @@ Uninstall LaunchAgent:
 ./scripts/uninstall-launch-agent.sh
 ```
 
-Service status:
+Check service state:
 
 ```bash
 launchctl print gui/$(id -u)/com.transparker.api | rg "state =|pid ="
 ```
 
-Logs:
+## Logs and Debug Mode
+
+Log files:
 - `~/Library/Logs/Transparker/transparker.out.log`
 - `~/Library/Logs/Transparker/transparker.err.log`
 
-Full transcript debug logs (opt-in):
-- Set `LOG_LEVEL=debug`.
-- Set `TRANSPARKER_LOG_FULL_TRANSCRIPTS=true`.
-- When enabled, request logs include:
-  - `transcript_received.input_full`
-  - `transcript_processed.output_full`
-- Default is disabled to avoid storing full transcript text in logs.
+Enable full transcript debug logging:
+- `LOG_LEVEL=debug`
+- `TRANSPARKER_LOG_FULL_TRANSCRIPTS=true`
 
-Live log tail:
+When enabled, request logs include:
+- `transcript_received.input_full`
+- `transcript_processed.output_full`
+
+Tail logs:
 
 ```bash
 tail -f ~/Library/Logs/Transparker/transparker.out.log
@@ -151,7 +160,7 @@ tail -f ~/Library/Logs/Transparker/transparker.out.log
 
 ## Development
 
-Run in watch mode:
+Run with watch mode:
 
 ```bash
 bun run dev
@@ -164,5 +173,5 @@ bun run check
 bun run test
 ```
 
-Text processing entrypoint:
+Transcript processing entrypoint:
 - `src/processor/processTranscript.ts`
