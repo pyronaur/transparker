@@ -1,8 +1,13 @@
-function normalizeWhitespace(input: string): string {
-  return input.replace(/\s+/g, " ").trim();
-}
+import { Logger } from "../logging/logger";
+import { loadCodexRuntimeConfig, processWithCodex } from "./codexRuntime";
+
+const codexConfig = loadCodexRuntimeConfig();
+const logger = new Logger(process.env.LOG_LEVEL ?? "info");
 
 export async function processTranscript(text: string): Promise<string> {
-  await Bun.sleep(2000);
-  return normalizeWhitespace(text);
+  return processWithCodex({
+    transcript: text,
+    config: codexConfig,
+    logger
+  });
 }

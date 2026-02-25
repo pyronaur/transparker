@@ -3,3 +3,5 @@ node_modules/
 .cursor/
 .claude/
 CLAUDE.md
+codex/*
+!codex/output.schema.json

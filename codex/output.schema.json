@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "cleaned_transcript"
+  ],
+  "properties": {
+    "cleaned_transcript": {
+      "type": "string"
+    }
+  }
+}
