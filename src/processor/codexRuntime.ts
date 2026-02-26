@@ -323,20 +323,15 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   const rootWordlistPath = resolvePath(projectRoot, options.config.wordlistFile);
   const codexHomePath = resolvePath(projectRoot, options.config.codexHomeDir);
   const codexUserHomePath = resolvePath(projectRoot, options.config.codexUserHomeDir);
-  const codexAgentsPath = resolve(codexHomePath, "AGENTS.md");
   const codexConfigPath = resolvePath(projectRoot, options.config.codexConfigFile);
   const schemaPath = resolvePath(projectRoot, options.config.outputSchemaFile);
 
   await mkdir(codexHomePath, { recursive: true });
 
-  const [agentsText, promptTemplate] = await Promise.all([
-    readFile(codexAgentsPath, "utf8"),
-    readFile(rootPromptPath, "utf8")
-  ]);
+  const promptTemplate = await readFile(rootPromptPath, "utf8");
 
-  if (isBlank(agentsText) || isBlank(promptTemplate)) {
-    options.logger.info("codex_passthrough_empty_prompt_files", {
-      agents_file: codexAgentsPath,
+  if (isBlank(promptTemplate)) {
+    options.logger.info("codex_passthrough_blank_prompt", {
       prompt_file: rootPromptPath
     });
     return options.transcript;
@@ -362,10 +357,8 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   await writeCodexConfig(codexConfigPath, options.config.reasoningEffort);
 
   options.logger.info("codex_assets_loaded", {
-    agents_file: codexAgentsPath,
     prompt_file: rootPromptPath,
     wordlist_file: rootWordlistPath,
-    agents_chars: agentsText.length,
     prompt_chars: promptTemplate.length,
     wordlist_chars: wordlistText.length
   });

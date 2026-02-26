@@ -107,31 +107,36 @@ describe("loadCodexRuntimeConfig", () => {
 });
 
 describe("processWithCodex", () => {
-  test("requires codex/AGENTS.md and does not read root AGENTS.md", async () => {
+  test("does not require AGENTS.md", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeFile(resolve(projectRoot, "AGENTS.md"), "root should be ignored", "utf8");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
       await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
       await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
 
-      await expect(
-        processWithCodex({
-          transcript: "raw transcript",
-          config: createConfig(projectRoot),
-          logger: noopLogger,
-          execCodex: async () => ({ exitCode: 0, stdout: "", stderr: "" })
-        })
-      ).rejects.toThrow("codex/AGENTS.md");
+      const output = await processWithCodex({
+        transcript: "raw transcript",
+        config: createConfig(projectRoot),
+        logger: noopLogger,
+        execCodex: async (input) => {
+          await writeFile(
+            input.jsonOutputPath,
+            JSON.stringify({ cleaned_transcript: "cleaned" }),
+            "utf8"
+          );
+          return { exitCode: 0, stdout: "", stderr: "" };
+        }
+      });
+
+      expect(output).toBe("cleaned");
     } finally {
       await rm(projectRoot, { recursive: true, force: true });
     }
   });
 
-  test("returns passthrough text when AGENTS or PROMPT is blank", async () => {
+  test("returns passthrough text when PROMPT is blank", async () => {
     const projectRoot = await makeTempProject();
     try {
-      await writeCodexAgents(projectRoot, "");
       await writeFile(resolve(projectRoot, "PROMPT.md"), "   \n", "utf8");
 
       let called = false;
