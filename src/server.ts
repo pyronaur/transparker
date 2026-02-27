@@ -8,21 +8,21 @@ const logger = new Logger(config.logLevel);
 const app = createApp(config, logger, { processTranscript });
 
 const server = Bun.serve({
-  hostname: config.host,
-  port: config.port,
-  fetch: app.fetch
+	hostname: config.host,
+	port: config.port,
+	fetch: app.fetch,
 });
 
 logger.info("server_started", {
-  host: config.host,
-  port: config.port,
-  model: config.modelId
+	host: config.host,
+	port: config.port,
+	model: config.modelId,
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    logger.info("server_stopping", { signal });
-    server.stop(true);
-    process.exit(0);
-  });
+	process.on(signal, () => {
+		logger.info("server_stopping", { signal });
+		void server.stop(true);
+		process.exit(0);
+	});
 }
