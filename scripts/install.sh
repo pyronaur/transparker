@@ -19,11 +19,15 @@ bun run check
 bun run test
 
 echo
-echo "3) Installing launch agent"
+echo "3) Building transparker binaries"
+bun run build:bin
+
+echo
+echo "4) Installing launch agent"
 "${SCRIPT_DIR}/install-launch-agent.sh"
 
 echo
-echo "4) Verifying health endpoint"
+echo "5) Verifying health endpoint"
 health_ok=0
 for _ in {1..30}; do
   if curl -fsS "http://127.0.0.1:43113/healthz" >/dev/null 2>&1; then

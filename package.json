@@ -1,12 +1,30 @@
 {
   "name": "transparker",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "license": "MIT",
   "type": "module",
+  "bin": {
+    "transparker": "npm/bin/transparker"
+  },
+  "files": [
+    "dist/bin/*",
+    "npm/bin/transparker",
+    "launchd/com.transparker.api.plist",
+    "scripts/install-launch-agent.sh",
+    "scripts/restart.sh",
+    "scripts/uninstall-launch-agent.sh",
+    "README.md",
+    "LICENSE",
+    "PROMPT.md",
+    "WORDLIST.md"
+  ],
   "scripts": {
     "install:local": "./scripts/install.sh",
     "dev": "bun --watch src/server.ts",
     "start": "bun src/server.ts",
+    "build:bin": "./scripts/build-binaries.sh",
+    "prepack": "bun run build:bin",
     "check": "bunx tsc --noEmit",
     "test": "bun test"
   },

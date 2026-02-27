@@ -11,18 +11,29 @@ TEMPLATE_PATH="${PROJECT_DIR}/launchd/${LABEL}.plist"
 TARGET_DIR="${HOME}/Library/LaunchAgents"
 TARGET_PATH="${TARGET_DIR}/${LABEL}.plist"
 LOG_DIR="${HOME}/Library/Logs/Transparker"
-BUN_BIN="$(command -v bun || true)"
+WORKING_DIR="${TRANSPARKER_WORKING_DIR:-${HOME}}"
 
-if [[ -z "${BUN_BIN}" ]]; then
-  echo "bun is not installed or not in PATH."
+if [[ -n "${TRANSPARKER_BIN_PATH:-}" ]]; then
+  TRANSPARKER_BIN="${TRANSPARKER_BIN_PATH}"
+elif [[ -x "${PROJECT_DIR}/npm/bin/transparker" ]]; then
+  TRANSPARKER_BIN="${PROJECT_DIR}/npm/bin/transparker"
+elif command -v transparker >/dev/null 2>&1; then
+  TRANSPARKER_BIN="$(command -v transparker)"
+else
+  echo "Could not locate transparker binary. Install it globally or set TRANSPARKER_BIN_PATH."
+  exit 1
+fi
+
+if [[ ! -x "${TRANSPARKER_BIN}" ]]; then
+  echo "transparker binary is not executable: ${TRANSPARKER_BIN}"
   exit 1
 fi
 
 mkdir -p "${TARGET_DIR}" "${LOG_DIR}"
 
 sed \
-  -e "s|__BUN_PATH__|${BUN_BIN}|g" \
-  -e "s|__PROJECT_DIR__|${PROJECT_DIR}|g" \
+  -e "s|__TRANSPARKER_BIN__|${TRANSPARKER_BIN}|g" \
+  -e "s|__WORKING_DIR__|${WORKING_DIR}|g" \
   -e "s|__LOG_DIR__|${LOG_DIR}|g" \
   "${TEMPLATE_PATH}" > "${TARGET_PATH}"
 

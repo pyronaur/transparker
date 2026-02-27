@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  transparker [serve|start]
+  transparker install-service
+  transparker restart-service
+  transparker uninstall-service
+  transparker help
+EOF
+}
+
+resolve_script_dir() {
+  local source="${BASH_SOURCE[0]}"
+  while [[ -L "${source}" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "${source}")" && pwd)"
+    source="$(readlink "${source}")"
+    if [[ "${source}" != /* ]]; then
+      source="${dir}/${source}"
+    fi
+  done
+  cd -P "$(dirname "${source}")" && pwd
+}
+
+script_dir="$(resolve_script_dir)"
+package_root="$(cd "${script_dir}/../.." && pwd)"
+
+platform="$(uname -s)"
+arch="$(uname -m)"
+
+binary_name=""
+if [[ "${platform}" == "Darwin" ]]; then
+  case "${arch}" in
+    arm64|aarch64)
+      binary_name="transparker-darwin-arm64"
+      ;;
+    x86_64|amd64)
+      binary_name="transparker-darwin-x64"
+      ;;
+  esac
+fi
+
+if [[ -n "${binary_name}" ]]; then
+  binary_path="${package_root}/dist/bin/${binary_name}"
+else
+  binary_path=""
+fi
+
+if [[ -z "${binary_path}" || ! -x "${binary_path}" ]]; then
+  if command -v bun >/dev/null 2>&1 && [[ -f "${package_root}/src/server.ts" ]]; then
+    binary_path="bun"
+    use_bun_fallback=1
+  else
+    echo "Unsupported platform or missing transparker binary for ${platform}/${arch}."
+    exit 1
+  fi
+else
+  use_bun_fallback=0
+fi
+
+export TRANSPARKER_PROJECT_ROOT="${TRANSPARKER_PROJECT_ROOT:-${package_root}}"
+
+command="${1:-serve}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+case "${command}" in
+  serve|start)
+    if [[ "${use_bun_fallback}" -eq 1 ]]; then
+      exec "${binary_path}" "${package_root}/src/server.ts" "$@"
+    fi
+    exec "${binary_path}" "$@"
+    ;;
+  install-service)
+    exec "${package_root}/scripts/install-launch-agent.sh" "$@"
+    ;;
+  restart-service)
+    exec "${package_root}/scripts/restart.sh" "$@"
+    ;;
+  uninstall-service)
+    exec "${package_root}/scripts/uninstall-launch-agent.sh" "$@"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown transparker command: ${command}"
+    echo
+    usage
+    exit 1
+    ;;
+esac
