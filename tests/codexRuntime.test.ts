@@ -11,6 +11,12 @@ import {
   type CodexRuntimeLogger
 } from "../src/processor/codexRuntime";
 
+interface LoggedEvent {
+  readonly level: "info" | "error";
+  readonly message: string;
+  readonly meta: Record<string, unknown>;
+}
+
 async function makeTempProject(): Promise<string> {
   return mkdtemp(join(tmpdir(), "transparker-test-"));
 }
@@ -41,6 +47,28 @@ const noopLogger: CodexRuntimeLogger = {
   info() {},
   error() {}
 };
+
+function createCapturingLogger(): { logger: CodexRuntimeLogger; events: LoggedEvent[] } {
+  const events: LoggedEvent[] = [];
+  return {
+    logger: {
+      info(message, meta = {}) {
+        events.push({ level: "info", message, meta });
+      },
+      error(message, meta = {}) {
+        events.push({ level: "error", message, meta });
+      }
+    },
+    events
+  };
+}
+
+function datePath(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
 
 async function withEnv<T>(patch: Record<string, string | undefined>, run: () => Promise<T>): Promise<T> {
   const before = { ...process.env };
@@ -427,6 +455,77 @@ describe("processWithCodex", () => {
           })
         )
       ).rejects.toBeInstanceOf(CodexRuntimeError);
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("logs session diagnostics and request id for codex execution", async () => {
+    const projectRoot = await makeTempProject();
+    const { logger, events } = createCapturingLogger();
+
+    try {
+      await writeFile(resolve(projectRoot, "PROMPT.md"), "{{TRANSCRIPT}}", "utf8");
+      await writeFile(resolve(projectRoot, "WORDLIST.md"), "- term", "utf8");
+      await writeFile(resolve(projectRoot, "global-auth.json"), "{\"token\":\"x\"}", "utf8");
+
+      await processWithCodex({
+        transcript: "x",
+        requestId: "req-123",
+        config: createConfig(projectRoot),
+        logger,
+        execCodex: async (input) => {
+          const now = new Date();
+          const payloadStartIso = new Date(now.getTime()).toISOString();
+          const firstEventIso = new Date(now.getTime() + 20_000).toISOString();
+          const taskCompleteIso = new Date(now.getTime() + 22_000).toISOString();
+          const sessionRoot = resolve(projectRoot, "codex/sessions", datePath(now));
+          await mkdir(sessionRoot, { recursive: true });
+          await writeFile(
+            resolve(sessionRoot, "rollout-test.jsonl"),
+            [
+              JSON.stringify({
+                timestamp: firstEventIso,
+                type: "session_meta",
+                payload: {
+                  id: "session-123",
+                  timestamp: payloadStartIso
+                }
+              }),
+              JSON.stringify({
+                timestamp: firstEventIso,
+                type: "event_msg",
+                payload: {
+                  type: "task_started"
+                }
+              }),
+              JSON.stringify({
+                timestamp: taskCompleteIso,
+                type: "event_msg",
+                payload: {
+                  type: "task_complete"
+                }
+              })
+            ].join("\n"),
+            "utf8"
+          );
+          await writeFile(
+            input.jsonOutputPath,
+            JSON.stringify({ cleaned_transcript: "cleaned" }),
+            "utf8"
+          );
+          return { exitCode: 0, stdout: "", stderr: "" };
+        }
+      });
+
+      const diagnostics = events.find((event) => event.message === "codex_exec_session_diagnostics");
+      expect(diagnostics).toBeDefined();
+      expect(diagnostics?.meta.request_id).toBe("req-123");
+      expect(diagnostics?.meta.session_found).toBe(true);
+      expect(diagnostics?.meta.session_id).toBe("session-123");
+      expect(diagnostics?.meta.session_has_task_complete).toBe(true);
+      expect(diagnostics?.meta.session_active_ms).toBe(2000);
+      expect((diagnostics?.meta.session_boot_gap_ms as number) >= 20_000).toBe(true);
     } finally {
       await rm(projectRoot, { recursive: true, force: true });
     }

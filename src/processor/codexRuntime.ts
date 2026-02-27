@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { loadTransparkerFileDefaults } from "../fileConfig";
 
@@ -307,19 +307,207 @@ async function withSoftTimeout<T>(
   }
 }
 
-function stderrPreview(stderr: string): string {
-  return stderr.replace(/\s+/g, " ").trim().slice(0, 280);
+function textPreview(text: string): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, 280);
+}
+
+interface SessionSnapshot {
+  readonly file: string;
+  readonly payloadStartedAt: number;
+  readonly firstEventAt: number;
+  readonly sessionId: string;
+  readonly eventCount: number;
+  readonly hasTaskComplete: boolean;
+  readonly taskCompletedAt: number | null;
+}
+
+function toIsoDatePath(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+async function listSessionFiles(
+  codexHomePath: string,
+  startedAtMs: number,
+  endedAtMs: number
+): Promise<string[]> {
+  const sessionsRoot = resolve(codexHomePath, "sessions");
+  const dayMs = 24 * 60 * 60 * 1000;
+  const dayPaths = unique([
+    toIsoDatePath(startedAtMs - dayMs),
+    toIsoDatePath(startedAtMs),
+    toIsoDatePath(startedAtMs + dayMs),
+    toIsoDatePath(endedAtMs)
+  ]);
+
+  const files: string[] = [];
+  for (const dayPath of dayPaths) {
+    const dayDir = resolve(sessionsRoot, dayPath);
+    if (!(await exists(dayDir))) {
+      continue;
+    }
+
+    const entries = await readdir(dayDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".jsonl")) {
+        continue;
+      }
+      files.push(resolve(dayDir, entry.name));
+    }
+  }
+
+  return files;
+}
+
+async function loadSessionSnapshot(filePath: string): Promise<SessionSnapshot | null> {
+  const text = await readFile(filePath, "utf8");
+  if (isBlank(text)) {
+    return null;
+  }
+
+  const lines = text.split("\n").filter((line) => line.trim().length > 0);
+  if (lines.length === 0) {
+    return null;
+  }
+
+  let firstEvent: unknown;
+  try {
+    firstEvent = JSON.parse(lines[0]);
+  } catch {
+    return null;
+  }
+
+  if (typeof firstEvent !== "object" || firstEvent === null) {
+    return null;
+  }
+
+  const firstEventTsRaw = (firstEvent as { timestamp?: unknown }).timestamp;
+  const firstEventType = (firstEvent as { type?: unknown }).type;
+  const payload = (firstEvent as { payload?: unknown }).payload;
+
+  if (firstEventType !== "session_meta" || typeof payload !== "object" || payload === null) {
+    return null;
+  }
+
+  const payloadStartRaw = (payload as { timestamp?: unknown }).timestamp;
+  const payloadSessionIdRaw = (payload as { id?: unknown }).id;
+  if (typeof firstEventTsRaw !== "string" || typeof payloadStartRaw !== "string") {
+    return null;
+  }
+
+  const firstEventAt = Date.parse(firstEventTsRaw);
+  const payloadStartedAt = Date.parse(payloadStartRaw);
+  if (!Number.isFinite(firstEventAt) || !Number.isFinite(payloadStartedAt)) {
+    return null;
+  }
+
+  let hasTaskComplete = false;
+  let taskCompletedAt: number | null = null;
+  for (const line of lines) {
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof event !== "object" || event === null) {
+      continue;
+    }
+
+    const eventType = (event as { type?: unknown }).type;
+    const eventTsRaw = (event as { timestamp?: unknown }).timestamp;
+    const eventPayload = (event as { payload?: unknown }).payload;
+    if (
+      eventType === "event_msg" &&
+      typeof eventPayload === "object" &&
+      eventPayload !== null &&
+      (eventPayload as { type?: unknown }).type === "task_complete" &&
+      typeof eventTsRaw === "string"
+    ) {
+      const parsed = Date.parse(eventTsRaw);
+      if (Number.isFinite(parsed)) {
+        hasTaskComplete = true;
+        taskCompletedAt = parsed;
+      }
+    }
+  }
+
+  return {
+    file: basename(filePath),
+    payloadStartedAt,
+    firstEventAt,
+    sessionId: typeof payloadSessionIdRaw === "string" ? payloadSessionIdRaw : "unknown",
+    eventCount: lines.length,
+    hasTaskComplete,
+    taskCompletedAt
+  };
+}
+
+async function collectSessionDiagnostics(
+  codexHomePath: string,
+  startedAtMs: number,
+  endedAtMs: number
+): Promise<Record<string, unknown>> {
+  const sessionFiles = await listSessionFiles(codexHomePath, startedAtMs, endedAtMs);
+  if (sessionFiles.length === 0) {
+    return { session_found: false };
+  }
+
+  const snapshots = (
+    await Promise.all(sessionFiles.map(async (filePath) => loadSessionSnapshot(filePath)))
+  ).filter((snapshot): snapshot is SessionSnapshot => snapshot !== null);
+
+  if (snapshots.length === 0) {
+    return { session_found: false };
+  }
+
+  const windowStartMs = startedAtMs - 5_000;
+  const windowEndMs = endedAtMs + 5_000;
+  const candidates = snapshots.filter(
+    (snapshot) => snapshot.payloadStartedAt >= windowStartMs && snapshot.payloadStartedAt <= windowEndMs
+  );
+
+  if (candidates.length === 0) {
+    return { session_found: false };
+  }
+
+  const closest = candidates.reduce((best, current) => {
+    const bestDelta = Math.abs(best.payloadStartedAt - startedAtMs);
+    const currentDelta = Math.abs(current.payloadStartedAt - startedAtMs);
+    return currentDelta < bestDelta ? current : best;
+  });
+
+  return {
+    session_found: true,
+    session_id: closest.sessionId,
+    session_file: closest.file,
+    session_boot_gap_ms: Math.max(0, closest.firstEventAt - closest.payloadStartedAt),
+    session_active_ms:
+      closest.taskCompletedAt === null ? null : Math.max(0, closest.taskCompletedAt - closest.firstEventAt),
+    session_has_task_complete: closest.hasTaskComplete,
+    session_event_count: closest.eventCount
+  };
 }
 
 interface ProcessOptions {
   readonly transcript: string;
   readonly config: CodexRuntimeConfig;
   readonly logger: CodexRuntimeLogger;
+  readonly requestId?: string;
   readonly execCodex?: (input: CodexExecInput) => Promise<CodexExecOutput>;
 }
 
 export async function processWithCodex(options: ProcessOptions): Promise<string> {
+  const pipelineStartedAt = Date.now();
   const execCodex = options.execCodex ?? runCodexCommand;
+  const requestMeta = options.requestId ? { request_id: options.requestId } : {};
 
   const projectRoot = options.config.projectRoot;
   const rootPromptPath = resolvePath(projectRoot, options.config.promptFile);
@@ -335,6 +523,7 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
 
   if (isBlank(promptTemplate)) {
     options.logger.info("codex_passthrough_blank_prompt", {
+      ...requestMeta,
       prompt_file: rootPromptPath
     });
     return options.transcript;
@@ -360,6 +549,7 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   await writeCodexConfig(codexConfigPath, options.config.reasoningEffort);
 
   options.logger.info("codex_assets_loaded", {
+    ...requestMeta,
     prompt_file: rootPromptPath,
     wordlist_file: rootWordlistPath,
     prompt_chars: promptTemplate.length,
@@ -367,10 +557,12 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   });
 
   options.logger.info("codex_auth_resolved", {
+    ...requestMeta,
     mode: authMode
   });
 
   options.logger.info("codex_config_written", {
+    ...requestMeta,
     config_file: codexConfigPath,
     reasoning_effort: options.config.reasoningEffort
   });
@@ -382,6 +574,7 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   await writeFile(promptPath, composedPrompt, "utf8");
 
   options.logger.info("codex_prompt_composed", {
+    ...requestMeta,
     prompt_chars: composedPrompt.length,
     has_known_domain_terms_placeholder: promptTemplate.includes("{{KNOWN_DOMAIN_TERMS}}"),
     has_transcript_placeholder: promptTemplate.includes("{{TRANSCRIPT}}")
@@ -390,9 +583,13 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
   const startedAt = Date.now();
 
   options.logger.info("codex_exec_started", {
+    ...requestMeta,
     model: options.config.model,
-    codex_home: codexHomePath
+    codex_home: codexHomePath,
+    prep_latency_ms: startedAt - pipelineStartedAt
   });
+
+  let lastResult: CodexExecOutput | null = null;
 
   try {
     const childEnv: Record<string, string | undefined> = { ...process.env };
@@ -415,16 +612,18 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
       options.config.timeoutMs,
       () => {
         options.logger.info("codex_exec_timeout_abort_requested", {
+          ...requestMeta,
           timeout_ms: options.config.timeoutMs,
           model: options.config.model
         });
       }
     );
+    lastResult = result;
 
     if (result.exitCode !== 0) {
       throw new CodexRuntimeError(
         "codex_exit_non_zero",
-        `Codex command failed with exit code ${result.exitCode}. ${stderrPreview(result.stderr)}`
+        `Codex command failed with exit code ${result.exitCode}. ${textPreview(result.stderr)}`
       );
     }
 
@@ -448,17 +647,54 @@ export async function processWithCodex(options: ProcessOptions): Promise<string>
     }
 
     const cleanedTranscript = (parsed as { cleaned_transcript: string }).cleaned_transcript;
+    const endedAt = Date.now();
+    const sessionDiagnostics = await collectSessionDiagnostics(codexHomePath, startedAt, endedAt);
+
+    options.logger.info("codex_exec_session_diagnostics", {
+      ...requestMeta,
+      ...sessionDiagnostics,
+      status: "completed"
+    });
 
     options.logger.info("codex_exec_completed", {
-      latency_ms: Date.now() - startedAt,
-      output_chars: cleanedTranscript.length
+      ...requestMeta,
+      latency_ms: endedAt - startedAt,
+      output_chars: cleanedTranscript.length,
+      ...(isBlank(result.stderr) ? {} : { stderr_preview: textPreview(result.stderr) }),
+      ...(isBlank(result.stdout) ? {} : { stdout_preview: textPreview(result.stdout) })
     });
 
     return cleanedTranscript;
   } catch (error) {
+    const endedAt = Date.now();
+    let sessionDiagnostics: Record<string, unknown>;
+    try {
+      sessionDiagnostics = await collectSessionDiagnostics(codexHomePath, startedAt, endedAt);
+    } catch (diagnosticsError) {
+      sessionDiagnostics = {
+        session_found: false,
+        session_diagnostics_error:
+          diagnosticsError instanceof Error ? diagnosticsError.message : String(diagnosticsError)
+      };
+    }
+
+    options.logger.info("codex_exec_session_diagnostics", {
+      ...requestMeta,
+      ...sessionDiagnostics,
+      status: "failed"
+    });
+
     options.logger.error("codex_exec_failed", {
-      latency_ms: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error)
+      ...requestMeta,
+      latency_ms: endedAt - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+      ...(error instanceof CodexRuntimeError ? { error_code: error.code } : {}),
+      ...(lastResult && !isBlank(lastResult.stderr)
+        ? { stderr_preview: textPreview(lastResult.stderr) }
+        : {}),
+      ...(lastResult && !isBlank(lastResult.stdout)
+        ? { stdout_preview: textPreview(lastResult.stdout) }
+        : {})
     });
     throw error;
   } finally {

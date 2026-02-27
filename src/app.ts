@@ -8,7 +8,7 @@ import {
 import { buildModelsResponse } from "./openai/models";
 
 interface AppDependencies {
-  readonly processTranscript: (text: string) => Promise<string>;
+  readonly processTranscript: (text: string, context?: { requestId?: string }) => Promise<string>;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -92,7 +92,7 @@ export function createApp(config: AppConfig, logger: Logger, deps: AppDependenci
             ...(config.logFullTranscripts ? { input_full: validation.userText } : {})
           });
 
-          const processed = await deps.processTranscript(validation.userText);
+          const processed = await deps.processTranscript(validation.userText, { requestId });
 
           logger.info("transcript_processed", {
             request_id: requestId,

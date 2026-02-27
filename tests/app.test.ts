@@ -100,6 +100,33 @@ describe("app routes", () => {
     expect(json.error.code).toBe("streaming_unsupported");
   });
 
+  test("passes request id into transcript processor context", async () => {
+    let seenRequestId: string | undefined;
+    const app = createApp(baseConfig, new Logger("error"), {
+      processTranscript: async (text, context) => {
+        seenRequestId = context?.requestId;
+        return text;
+      }
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "Transparker",
+          messages: [{ role: "user", content: "request id test" }]
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(typeof seenRequestId).toBe("string");
+    expect(seenRequestId?.length).toBeGreaterThan(0);
+  });
+
   test("includes full transcript fields when enabled", async () => {
     const lines: string[] = [];
     const originalLog = console.log;
