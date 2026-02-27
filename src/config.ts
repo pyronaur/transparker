@@ -1,3 +1,5 @@
+import { loadTransparkerFileDefaults } from "./fileConfig";
+
 export interface AppConfig {
   readonly port: number;
   readonly host: string;
@@ -36,12 +38,17 @@ function parseBoolean(raw: string | undefined, fallback: boolean): boolean {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const fileDefaults = loadTransparkerFileDefaults(env);
+
   return {
-    port: parsePort(env.PORT, 43113),
-    host: env.HOST ?? "127.0.0.1",
-    logLevel: env.LOG_LEVEL ?? "info",
-    logFullTranscripts: parseBoolean(env.TRANSPARKER_LOG_FULL_TRANSCRIPTS, false),
-    modelId: env.TRANSPARKER_MODEL_ID ?? "Transparker",
-    modelOwner: env.TRANSPARKER_MODEL_OWNER ?? "transparker-local"
+    port: parsePort(env.PORT, fileDefaults.app.port),
+    host: env.HOST ?? fileDefaults.app.host,
+    logLevel: env.LOG_LEVEL ?? fileDefaults.app.logLevel,
+    logFullTranscripts: parseBoolean(
+      env.TRANSPARKER_LOG_FULL_TRANSCRIPTS,
+      fileDefaults.app.logFullTranscripts
+    ),
+    modelId: env.TRANSPARKER_MODEL_ID ?? fileDefaults.app.modelId,
+    modelOwner: env.TRANSPARKER_MODEL_OWNER ?? fileDefaults.app.modelOwner
   };
 }

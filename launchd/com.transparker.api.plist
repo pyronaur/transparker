@@ -17,24 +17,8 @@
 
     <key>EnvironmentVariables</key>
     <dict>
-      <key>PORT</key>
-      <string>43113</string>
-      <key>HOST</key>
-      <string>127.0.0.1</string>
       <key>NODE_ENV</key>
       <string>production</string>
-      <key>LOG_LEVEL</key>
-      <string>info</string>
-      <key>TRANSPARKER_LOG_FULL_TRANSCRIPTS</key>
-      <string>false</string>
-      <key>TRANSPARKER_CODEX_MODEL</key>
-      <string>gpt-5.3-codex-spark</string>
-      <key>TRANSPARKER_CODEX_REASONING_EFFORT</key>
-      <string>low</string>
-      <key>TRANSPARKER_MODEL_ID</key>
-      <string>Transparker</string>
-      <key>TRANSPARKER_MODEL_OWNER</key>
-      <string>transparker-local</string>
     </dict>
 
     <key>RunAtLoad</key>

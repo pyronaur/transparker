@@ -86,23 +86,42 @@ describe("buildPrompt", () => {
 });
 
 describe("loadCodexRuntimeConfig", () => {
-  test("uses portable global auth default", () => {
-    const config = loadCodexRuntimeConfig({
-      TRANSPARKER_PROJECT_ROOT: "/tmp/transparker-test"
-    } as unknown as NodeJS.ProcessEnv);
+  test("uses file-backed defaults in ~/.transparker", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "transparker-home-test-"));
+    try {
+      const config = loadCodexRuntimeConfig({
+        TRANSPARKER_PROJECT_ROOT: "/tmp/transparker-test",
+        TRANSPARKER_HOME_DIR: homeDir
+      } as unknown as NodeJS.ProcessEnv);
 
-    expect(config.globalAuthFile).toBe(join(homedir(), "codex/auth.json"));
-    expect(config.model).toBe("gpt-5.3-codex-spark");
-    expect(config.reasoningEffort).toBe("low");
+      expect(config.globalAuthFile).toBe(join(homedir(), "codex/auth.json"));
+      expect(config.model).toBe("gpt-5.3-codex-spark");
+      expect(config.reasoningEffort).toBe("low");
+      expect(config.wordlistFile).toBe(join(homeDir, "wordlist.md"));
+      expect(config.promptFile).toBe(join(homeDir, "prompt.md"));
+      expect(config.codexHomeDir).toBe(join(homeDir, "codex"));
+
+      await expect(readFile(join(homeDir, "config.toml"), "utf8")).resolves.toContain("wordlist_file");
+      await expect(readFile(join(homeDir, "wordlist.md"), "utf8")).resolves.toContain("transparker");
+      await expect(readFile(join(homeDir, "prompt.md"), "utf8")).resolves.toContain("{{TRANSCRIPT}}");
+    } finally {
+      await rm(homeDir, { recursive: true, force: true });
+    }
   });
 
-  test("allows overriding codex model via env", () => {
-    const config = loadCodexRuntimeConfig({
-      TRANSPARKER_PROJECT_ROOT: "/tmp/transparker-test",
-      TRANSPARKER_CODEX_MODEL: "gpt-5.3-codex-spark-custom"
-    } as unknown as NodeJS.ProcessEnv);
+  test("allows overriding codex model via env", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "transparker-home-test-"));
+    try {
+      const config = loadCodexRuntimeConfig({
+        TRANSPARKER_PROJECT_ROOT: "/tmp/transparker-test",
+        TRANSPARKER_HOME_DIR: homeDir,
+        TRANSPARKER_CODEX_MODEL: "gpt-5.3-codex-spark-custom"
+      } as unknown as NodeJS.ProcessEnv);
 
-    expect(config.model).toBe("gpt-5.3-codex-spark-custom");
+      expect(config.model).toBe("gpt-5.3-codex-spark-custom");
+    } finally {
+      await rm(homeDir, { recursive: true, force: true });
+    }
   });
 });
 

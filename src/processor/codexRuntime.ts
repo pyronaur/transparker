@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
+import { loadTransparkerFileDefaults } from "../fileConfig";
 
 const DEFAULT_SCHEMA = {
   type: "object",
@@ -196,22 +197,24 @@ async function ensureAuth(
 }
 
 export function loadCodexRuntimeConfig(env: NodeJS.ProcessEnv = process.env): CodexRuntimeConfig {
+  const fileDefaults = loadTransparkerFileDefaults(env);
   const projectRoot = resolve(env.TRANSPARKER_PROJECT_ROOT ?? process.cwd());
-  const defaultGlobalAuthFile = join(homedir(), "codex/auth.json");
 
   return {
     projectRoot,
-    codexBin: env.TRANSPARKER_CODEX_BIN ?? "codex",
-    model: env.TRANSPARKER_CODEX_MODEL ?? "gpt-5.3-codex-spark",
-    reasoningEffort: parseReasoningEffort(env.TRANSPARKER_CODEX_REASONING_EFFORT),
-    timeoutMs: parsePositiveInt(env.TRANSPARKER_CODEX_TIMEOUT_MS, 120_000),
-    codexHomeDir: env.TRANSPARKER_CODEX_HOME_DIR ?? "./codex",
-    codexUserHomeDir: env.TRANSPARKER_CODEX_USER_HOME_DIR ?? "./codex/.home",
-    globalAuthFile: env.TRANSPARKER_GLOBAL_AUTH_FILE ?? defaultGlobalAuthFile,
-    wordlistFile: env.TRANSPARKER_WORDLIST_FILE ?? "./WORDLIST.md",
-    codexConfigFile: env.TRANSPARKER_CODEX_CONFIG_FILE ?? "./codex/config.toml",
-    promptFile: env.TRANSPARKER_PROMPT_FILE ?? "./PROMPT.md",
-    outputSchemaFile: env.TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE ?? "./codex/output.schema.json"
+    codexBin: env.TRANSPARKER_CODEX_BIN ?? fileDefaults.codex.codexBin,
+    model: env.TRANSPARKER_CODEX_MODEL ?? fileDefaults.codex.model,
+    reasoningEffort: parseReasoningEffort(
+      env.TRANSPARKER_CODEX_REASONING_EFFORT ?? fileDefaults.codex.reasoningEffort
+    ),
+    timeoutMs: parsePositiveInt(env.TRANSPARKER_CODEX_TIMEOUT_MS, fileDefaults.codex.timeoutMs),
+    codexHomeDir: env.TRANSPARKER_CODEX_HOME_DIR ?? fileDefaults.codex.codexHomeDir,
+    codexUserHomeDir: env.TRANSPARKER_CODEX_USER_HOME_DIR ?? fileDefaults.codex.codexUserHomeDir,
+    globalAuthFile: env.TRANSPARKER_GLOBAL_AUTH_FILE ?? fileDefaults.codex.globalAuthFile,
+    wordlistFile: env.TRANSPARKER_WORDLIST_FILE ?? fileDefaults.codex.wordlistFile,
+    codexConfigFile: env.TRANSPARKER_CODEX_CONFIG_FILE ?? fileDefaults.codex.codexConfigFile,
+    promptFile: env.TRANSPARKER_PROMPT_FILE ?? fileDefaults.codex.promptFile,
+    outputSchemaFile: env.TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE ?? fileDefaults.codex.outputSchemaFile
   };
 }
 
