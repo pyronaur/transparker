@@ -1,0 +1,12 @@
+{
+	"threshold": 0,
+	"path": ["src"],
+	"reporters": ["console"],
+	"minTokens": 40,
+	"minLines": 3,
+	"formats": ["typescript", "javascript"],
+	"ignore": [
+		"**/node_modules/**",
+		"**/dist/**"
+	]
+}

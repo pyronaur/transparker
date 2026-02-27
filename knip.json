@@ -1,0 +1,5 @@
+{
+	"entry": ["src/server.ts"],
+	"project": ["tsconfig.json"],
+	"ignore": ["node_modules", "dist"]
+}
