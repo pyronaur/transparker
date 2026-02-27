@@ -9,6 +9,7 @@ It gives Handy an OpenAI-compatible local endpoint, runs correction with your Co
 - Avoid wiring an OpenAI API key into Handy for this workflow.
 - Keep behavior editable with `codex/AGENTS.md`, `~/.transparker/config.toml`, `~/.transparker/prompt.md`, and `~/.transparker/wordlist.md`.
 - Run it as a persistent macOS LaunchAgent so it is always available.
+- Install globally with `npm` or `bun` while running on Bun runtime (embedded in binary builds).
 
 ## How It Works
 
@@ -18,24 +19,36 @@ It gives Handy an OpenAI-compatible local endpoint, runs correction with your Co
 - `OPENAI_API_KEY` is intentionally ignored by this runtime path.
 - The service is locally hosted, but Codex processing still depends on Codex backend/auth.
 
-## Quick Start (macOS)
+## Quick Start (Global Install, macOS)
 
 Requirements:
 - macOS
-- [Bun](https://bun.sh)
 - `codex` CLI installed and authenticated
+- `npm` or `bun` package manager
 
-Install, test, and enable auto-launch:
+Install:
 
 ```bash
-bun run install:local
+npm install -g transparker
+# or
+bun install -g transparker
 ```
 
-`install:local` will:
-- install dependencies
-- run typecheck and tests
-- install and start the LaunchAgent
-- verify `http://127.0.0.1:43113/healthz`
+Install and start the LaunchAgent:
+
+```bash
+transparker install-service
+```
+
+Verify health:
+
+```bash
+curl -fsS "http://127.0.0.1:43113/healthz"
+```
+
+Supported global-install platforms:
+- macOS arm64
+- macOS x64
 
 ## Handy.app Setup
 
@@ -123,6 +136,12 @@ launchctl kickstart -k gui/$(id -u)/com.transparker.api
 Manual run workflow:
 
 ```bash
+transparker
+```
+
+Manual run from source checkout:
+
+```bash
 bun run start
 ```
 
@@ -131,19 +150,19 @@ bun run start
 Install/start LaunchAgent:
 
 ```bash
-./scripts/install-launch-agent.sh
+transparker install-service
 ```
 
 Restart service:
 
 ```bash
-./scripts/restart.sh
+transparker restart-service
 ```
 
 Uninstall LaunchAgent:
 
 ```bash
-./scripts/uninstall-launch-agent.sh
+transparker uninstall-service
 ```
 
 Check service state:
@@ -173,6 +192,14 @@ tail -f ~/Library/Logs/Transparker/transparker.out.log
 ```
 
 ## Development
+
+Development from source requires [Bun](https://bun.sh).
+
+Install, test, and enable auto-launch from source checkout:
+
+```bash
+bun run install:local
+```
 
 Run with watch mode:
 
