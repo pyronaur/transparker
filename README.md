@@ -1,11 +1,15 @@
 # Transparker: Use Codex CLI to Clean Handy.app Transcripts
 
-Transparker is a small local Bun.js service that lets Handy.app use Codex CLI for transcript cleanup.
+Transparker is only for post-processing transcriptions from [Handy](https://handy.computer) with Codex.
+
+![Handy post-processing setup screenshot](https://raw.githubusercontent.com/pyronaur/transparker/main/screen.jpg)
+
+Transparker is a small local Bun.js service that lets Handy use Codex CLI specifically for transcript post-processing.
 It gives Handy an OpenAI-compatible local endpoint, runs correction with your Codex auth/subscription, and returns cleaned text in `chat.completions` format.
 
 ## Value
 
-- Use Codex CLI for transcript correction from Handy.app.
+- Use Codex CLI only for post-processing transcript correction from Handy.
 - Avoid wiring an OpenAI API key into Handy for this workflow.
 - Keep behavior editable with `codex/AGENTS.md`, `~/.transparker/config.toml`, `~/.transparker/prompt.md`, and `~/.transparker/wordlist.md`.
 - Run it as a persistent macOS LaunchAgent so it is always available.
