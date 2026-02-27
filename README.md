@@ -7,13 +7,13 @@ It gives Handy an OpenAI-compatible local endpoint, runs correction with your Co
 
 - Use Codex CLI for transcript correction from Handy.app.
 - Avoid wiring an OpenAI API key into Handy for this workflow.
-- Keep prompt behavior editable with `codex/AGENTS.md`, `PROMPT.md`, and `WORDLIST.md`.
+- Keep behavior editable with `codex/AGENTS.md`, `~/.transparker/config.toml`, `~/.transparker/prompt.md`, and `~/.transparker/wordlist.md`.
 - Run it as a persistent macOS LaunchAgent so it is always available.
 
 ## How It Works
 
 - Handy sends transcript text to `POST /v1/chat/completions`.
-- Transparker calls `codex` with your local auth (`./codex/auth.json`, optionally symlinked from `TRANSPARKER_GLOBAL_AUTH_FILE`).
+- Transparker calls `codex` with your local auth (`~/.transparker/codex/auth.json`, optionally symlinked from `TRANSPARKER_GLOBAL_AUTH_FILE`).
 - Transparker returns an OpenAI-shaped response with the cleaned transcript.
 - `OPENAI_API_KEY` is intentionally ignored by this runtime path.
 - The service is locally hosted, but Codex processing still depends on Codex backend/auth.
@@ -55,48 +55,64 @@ Use these values in Handy.app:
 
 ## Configuration
 
-Default environment values:
-- `HOST=127.0.0.1`
-- `PORT=43113`
-- `TRANSPARKER_MODEL_ID=Transparker`
-- `TRANSPARKER_MODEL_OWNER=transparker-local`
-- `LOG_LEVEL=info`
-- `TRANSPARKER_LOG_FULL_TRANSCRIPTS=false`
-- `TRANSPARKER_CODEX_MODEL=gpt-5.3-codex-spark`
-- `TRANSPARKER_CODEX_BIN=codex`
-- `TRANSPARKER_CODEX_REASONING_EFFORT=low`
-- `TRANSPARKER_CODEX_TIMEOUT_MS=120000`
-- `TRANSPARKER_CODEX_HOME_DIR=./codex`
-- `TRANSPARKER_CODEX_USER_HOME_DIR=./codex/.home`
-- `TRANSPARKER_GLOBAL_AUTH_FILE=~/codex/auth.json`
-- `TRANSPARKER_WORDLIST_FILE=./WORDLIST.md`
-- `TRANSPARKER_CODEX_CONFIG_FILE=./codex/config.toml`
-- `TRANSPARKER_PROMPT_FILE=./PROMPT.md`
-- `TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE=./codex/output.schema.json`
+Transparker uses file-first config in `~/.transparker/config.toml`.
+If missing, Transparker auto-creates:
+- `~/.transparker/config.toml`
+- `~/.transparker/wordlist.md`
+- `~/.transparker/prompt.md`
+
+Environment variables remain available and override config file values.
+
+Default `~/.transparker/config.toml`:
+
+```toml
+host = "127.0.0.1"
+port = 43113
+log_level = "info"
+log_full_transcripts = false
+model_id = "Transparker"
+model_owner = "transparker-local"
+wordlist_file = "/Users/<you>/.transparker/wordlist.md"
+
+[codex]
+bin = "codex"
+model = "gpt-5.3-codex-spark"
+reasoning_effort = "low"
+timeout_ms = 120000
+home_dir = "/Users/<you>/.transparker/codex"
+user_home_dir = "/Users/<you>/.transparker/codex/.home"
+global_auth_file = "/Users/<you>/codex/auth.json"
+config_file = "/Users/<you>/.transparker/codex/config.toml"
+prompt_file = "/Users/<you>/.transparker/prompt.md"
+output_schema_file = "/Users/<you>/.transparker/codex/output.schema.json"
+```
 
 ### Prompt and Wordlist Files
 
-- `codex/AGENTS.md`: canonical Codex instruction file.
-- `PROMPT.md`: template containing `{{KNOWN_DOMAIN_TERMS}}` and `{{TRANSCRIPT}}`.
-- `WORDLIST.md`: domain terms injected into each request.
+- `~/.transparker/prompt.md`: template containing `{{KNOWN_DOMAIN_TERMS}}` and `{{TRANSCRIPT}}`.
+- `~/.transparker/wordlist.md`: domain terms injected into each request (one term per line).
+- `codex/AGENTS.md`: canonical Codex instruction file loaded from `CODEX_HOME`.
 
 ### Codex Runtime and Auth
 
-- Codex runs with `CODEX_HOME=./codex`.
-- AGENTS instructions are loaded from project-local `CODEX_HOME`.
-- Transparker uses `./codex/auth.json`.
-- If `./codex/auth.json` is absent and `TRANSPARKER_GLOBAL_AUTH_FILE` exists, Transparker creates a symlink.
+- Codex runs with `CODEX_HOME=~/.transparker/codex` by default.
+- Transparker uses `~/.transparker/codex/auth.json`.
+- If local auth is absent and `TRANSPARKER_GLOBAL_AUTH_FILE` exists, Transparker creates a symlink.
 - `OPENAI_API_KEY` is ignored by this runtime path.
 
-### Model Selection
+### Optional Environment Overrides
 
-- Set `TRANSPARKER_CODEX_MODEL` to choose the Codex model.
-- Set `TRANSPARKER_CODEX_REASONING_EFFORT` to `low`, `medium`, or `high`.
+- `TRANSPARKER_HOME_DIR` (default `~/.transparker`)
+- `TRANSPARKER_CONFIG_FILE` (default `~/.transparker/config.toml`)
+- `HOST`, `PORT`, `LOG_LEVEL`, `TRANSPARKER_LOG_FULL_TRANSCRIPTS`
+- `TRANSPARKER_MODEL_ID`, `TRANSPARKER_MODEL_OWNER`
+- `TRANSPARKER_CODEX_MODEL`, `TRANSPARKER_CODEX_BIN`, `TRANSPARKER_CODEX_REASONING_EFFORT`, `TRANSPARKER_CODEX_TIMEOUT_MS`
+- `TRANSPARKER_CODEX_HOME_DIR`, `TRANSPARKER_CODEX_USER_HOME_DIR`, `TRANSPARKER_GLOBAL_AUTH_FILE`
+- `TRANSPARKER_WORDLIST_FILE`, `TRANSPARKER_PROMPT_FILE`, `TRANSPARKER_CODEX_CONFIG_FILE`, `TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE`
 
 LaunchAgent workflow:
-1. Edit `~/Library/LaunchAgents/com.transparker.api.plist` in `EnvironmentVariables`.
-2. Update `TRANSPARKER_CODEX_MODEL` and/or `TRANSPARKER_CODEX_REASONING_EFFORT`.
-3. Reload:
+1. Edit `~/.transparker/config.toml`.
+2. Reload:
 
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.transparker.api.plist 2>/dev/null || true
@@ -107,8 +123,6 @@ launchctl kickstart -k gui/$(id -u)/com.transparker.api
 Manual run workflow:
 
 ```bash
-export TRANSPARKER_CODEX_MODEL=gpt-5.3-codex-spark
-export TRANSPARKER_CODEX_REASONING_EFFORT=low
 bun run start
 ```
 
