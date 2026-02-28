@@ -1,6 +1,6 @@
 # Transparker: Use Codex CLI to Clean Handy.app Transcripts
 
-Transparker is only for post-processing transcriptions from [Handy](https://handy.computer) with Codex.
+Transparker is only for post-processing transcriptions from [Handy App](https://handy.computer) with Codex.
 
 ![Handy post-processing setup screenshot](https://raw.githubusercontent.com/pyronaur/transparker/main/screen.jpg)
 
