@@ -23,8 +23,8 @@ echo "3) Building transparker binaries"
 bun run build:bin
 
 echo
-echo "4) Installing launch agent"
-"${SCRIPT_DIR}/install-launch-agent.sh"
+echo "4) Installing transparker service"
+"${PROJECT_DIR}/npm/bin/transparker" install-service
 
 echo
 echo "5) Verifying health endpoint"
@@ -39,7 +39,12 @@ done
 
 if [[ "${health_ok}" -ne 1 ]]; then
   echo "Health check failed: could not reach http://127.0.0.1:43113/healthz"
-  launchctl print "gui/$(id -u)/com.transparker.api" | rg "state =|pid =|last exit code =" || true
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    launchctl print "gui/$(id -u)/com.transparker.api" | grep -E "state =|pid =|last exit code =" || true
+  elif [[ "$(uname -s)" == "Linux" ]] && command -v systemctl >/dev/null 2>&1; then
+    systemctl --user status transparker.service --no-pager | grep -E "Loaded:|Active:|Main PID:" || true
+    journalctl --user -u transparker.service -n 40 --no-pager || true
+  fi
   exit 1
 fi
 

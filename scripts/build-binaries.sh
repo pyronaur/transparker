@@ -14,14 +14,18 @@ fi
 mkdir -p "${OUT_DIR}"
 
 targets=(
-  "bun-darwin-arm64 transparker-darwin-arm64 arm64"
-  "bun-darwin-x64 transparker-darwin-x64 x86_64"
+  "bun-darwin-arm64 transparker-darwin-arm64 (arm64|aarch64)"
+  "bun-darwin-x64 transparker-darwin-x64 (x86_64|x86-64|amd64)"
+  "bun-linux-arm64 transparker-linux-arm64 (arm64|aarch64)"
+  "bun-linux-arm64-musl transparker-linux-arm64-musl (arm64|aarch64)"
+  "bun-linux-x64 transparker-linux-x64 (x86_64|x86-64|amd64)"
+  "bun-linux-x64-musl transparker-linux-x64-musl (x86_64|x86-64|amd64)"
 )
 
 for row in "${targets[@]}"; do
   target="$(echo "${row}" | awk '{print $1}')"
   name="$(echo "${row}" | awk '{print $2}')"
-  expected_arch="$(echo "${row}" | awk '{print $3}')"
+  expected_arch_pattern="$(echo "${row}" | awk '{print $3}')"
   outfile="${OUT_DIR}/${name}"
 
   echo "Building ${name} (${target})"
@@ -34,7 +38,7 @@ for row in "${targets[@]}"; do
   chmod +x "${outfile}"
 
   file_output="$(file "${outfile}")"
-  if [[ "${file_output}" != *"${expected_arch}"* ]]; then
+  if ! echo "${file_output}" | grep -Eq "${expected_arch_pattern}"; then
     echo "Unexpected architecture for ${outfile}: ${file_output}"
     exit 1
   fi

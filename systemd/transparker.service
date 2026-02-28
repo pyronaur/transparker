@@ -1,0 +1,17 @@
+[Unit]
+Description=Transparker local API service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=__TRANSPARKER_BIN__
+WorkingDirectory=__WORKING_DIR__
+Environment=NODE_ENV=production
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
