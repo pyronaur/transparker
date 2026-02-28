@@ -12,7 +12,7 @@ It gives Handy an OpenAI-compatible local endpoint, runs correction with your Co
 - Use Codex CLI only for post-processing transcript correction from Handy.
 - Avoid wiring an OpenAI API key into Handy for this workflow.
 - Keep behavior editable with `codex/AGENTS.md`, `~/.transparker/config.toml`, `~/.transparker/prompt.md`, and `~/.transparker/wordlist.md`.
-- Run it as a persistent macOS LaunchAgent so it is always available.
+- Run it as a persistent user service so it is always available (`launchd` on macOS, `systemd --user` on Linux).
 - Install globally with `npm` or `bun` while running on Bun runtime (embedded in binary builds).
 
 ## How It Works
@@ -23,10 +23,10 @@ It gives Handy an OpenAI-compatible local endpoint, runs correction with your Co
 - `OPENAI_API_KEY` is intentionally ignored by this runtime path.
 - The service is locally hosted, but Codex processing still depends on Codex backend/auth.
 
-## Quick Start (Global Install, macOS)
+## Quick Start (Global Install, macOS or Linux)
 
 Requirements:
-- macOS
+- macOS or Linux
 - `codex` CLI installed and authenticated
 - `npm` or `bun` package manager
 
@@ -38,7 +38,7 @@ npm install -g transparker
 bun install -g transparker
 ```
 
-Install and start the LaunchAgent:
+Install and start the service:
 
 ```bash
 transparker install-service
@@ -53,6 +53,8 @@ curl -fsS "http://127.0.0.1:43113/healthz"
 Supported global-install platforms:
 - macOS arm64
 - macOS x64
+- Linux arm64 (glibc + musl)
+- Linux x64 (glibc + musl)
 
 ## Handy.app Setup
 
@@ -127,14 +129,23 @@ output_schema_file = "/Users/<you>/.transparker/codex/output.schema.json"
 - `TRANSPARKER_CODEX_HOME_DIR`, `TRANSPARKER_CODEX_USER_HOME_DIR`, `TRANSPARKER_GLOBAL_AUTH_FILE`
 - `TRANSPARKER_WORDLIST_FILE`, `TRANSPARKER_PROMPT_FILE`, `TRANSPARKER_CODEX_CONFIG_FILE`, `TRANSPARKER_CODEX_OUTPUT_SCHEMA_FILE`
 
-LaunchAgent workflow:
+Service reload workflow:
 1. Edit `~/.transparker/config.toml`.
 2. Reload:
+
+macOS:
 
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.transparker.api.plist 2>/dev/null || true
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.transparker.api.plist
 launchctl kickstart -k gui/$(id -u)/com.transparker.api
+```
+
+Linux:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart transparker.service
 ```
 
 Manual run workflow:
@@ -149,9 +160,9 @@ Manual run from source checkout:
 bun run start
 ```
 
-## macOS Service Management
+## Service Management
 
-Install/start LaunchAgent:
+Install/start service:
 
 ```bash
 transparker install-service
@@ -163,16 +174,22 @@ Restart service:
 transparker restart-service
 ```
 
-Uninstall LaunchAgent:
+Uninstall service:
 
 ```bash
 transparker uninstall-service
 ```
 
-Check service state:
+Check service state (macOS):
 
 ```bash
 launchctl print gui/$(id -u)/com.transparker.api | rg "state =|pid ="
+```
+
+Check service state (Linux):
+
+```bash
+systemctl --user status transparker.service --no-pager
 ```
 
 ## Logs and Debug Mode
@@ -180,6 +197,7 @@ launchctl print gui/$(id -u)/com.transparker.api | rg "state =|pid ="
 Log files:
 - `~/Library/Logs/Transparker/transparker.out.log`
 - `~/Library/Logs/Transparker/transparker.err.log`
+- Linux logs via `journalctl --user -u transparker.service`
 
 Enable full transcript debug logging:
 - `LOG_LEVEL=debug`
@@ -193,6 +211,12 @@ Tail logs:
 
 ```bash
 tail -f ~/Library/Logs/Transparker/transparker.out.log
+```
+
+Linux log tail:
+
+```bash
+journalctl --user -u transparker.service -f
 ```
 
 ## Development
