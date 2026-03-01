@@ -1,8 +1,9 @@
 ---
-summary: "Local binary build and npm publish flow for transparker maintainers"
+summary: "Local binary build and release verification flow for transparker maintainers"
 read_when:
   - Publishing a new transparker package version from a local machine.
-  - Verifying which binaries are built and shipped to npm.
+  - Verifying which binaries are built and shipped.
+  - Running Linux smoke checks in OrbStack before a release.
 ---
 
 # Publishing
@@ -22,16 +23,7 @@ This repository uses a local publish flow.
 
 The script validates each output architecture with `file`.
 
-## What gets shipped
-
-`package.json` includes these relevant publish settings:
-
-- `scripts.prepack = "bun run build:bin"`
-- `files` includes `dist/bin/*`, `npm/bin/transparker`, and service assets for macOS/Linux
-
-Because of `prepack`, `npm pack` and `npm publish` rebuild binaries before packaging.
-
-## Local publish checklist
+## Local release checklist
 
 Run from repository root.
 
@@ -48,24 +40,26 @@ make lint
 bun run test
 ```
 
-3. Verify the package payload before publishing:
+3. Build release binaries:
 
 ```bash
-npm pack --dry-run
+bun run build:bin
 ```
 
-4. Publish to npm:
+4. Verify generated binaries:
 
 ```bash
-npm publish
+ls -1 dist/bin/transparker-*
+file dist/bin/transparker-*
 ```
 
-## Post-publish smoke test
+5. Run the private credentialed release runbook from `~/.nconf/docs/`.
+
+## Post-release smoke test
 
 On a clean shell/session:
 
 ```bash
-npm install -g transparker
 transparker help
 ```
 
@@ -78,28 +72,15 @@ curl -fsS "http://127.0.0.1:43113/healthz"
 
 ## OrbStack Linux smoke test
 
-Build and inspect package tarball locally:
-
-```bash
-npm pack
-```
-
-Install and run in a Linux container using OrbStack’s Docker runtime:
+Run Linux binary smoke test in an OrbStack container:
 
 ```bash
 docker run --rm -it -v "$PWD:/work" -w /work ubuntu:24.04 bash -lc '
   apt-get update &&
-  apt-get install -y curl ca-certificates npm &&
-  npm install -g ./transparker-<version>.tgz &&
-  transparker help
+  apt-get install -y ca-certificates &&
+  chmod +x ./dist/bin/transparker-linux-x64 &&
+  ./dist/bin/transparker-linux-x64 help
 '
-```
-
-Optional Linux service smoke test (when `systemd --user` is available in the container/session):
-
-```bash
-transparker install-service
-systemctl --user status transparker.service --no-pager
 ```
 
 ## Public repo safety
